@@ -2,9 +2,6 @@
 name: Researcher Subagent
 description: 'Research subagent using search, read, web-fetch, GitHub repo, and MCP tools'
 user-invocable: false
-model:
-  - Claude Haiku 4.5 (copilot)
-  - GPT-5.4 mini (copilot)
 ---
 
 # Researcher Subagent
@@ -14,13 +11,16 @@ Research specific questions and topics using search tools, read tools, fetch web
 ## Inputs
 
 * Research topics and/or questions to investigate.
+* (Optional) Explicit model identifier supplied by the parent agent for this research run.
 * Subagent research document file path `.copilot-tracking/research/subagents/{{YYYY-MM-DD}}/{{topic}}.md` otherwise determined from topics.
+* (Optional) Model-specific subagent research document file path supplied by the parent agent when running equivalent research across multiple models.
 
 ## Subagent Research Document
 
 Create and update the subagent research document progressively documenting:
 
 * Research topics and/or questions being investigated.
+* Model identifier when the parent agent supplies one.
 * Relevant discoveries, documentation, examples, APIs, SDKs, libraries, modules, frameworks.
 * References and evidence.
 * Follow-on questions discovered during research (only when directly relevant to the original scope).
@@ -31,6 +31,7 @@ Create and update the subagent research document progressively documenting:
 
 1. Create the subagent research document with placeholders if it does not already exist.
 2. Add the research topics and/or questions to the subagent research document.
+3. Record the explicit model identifier when the parent agent supplies one.
 
 Progressively update the subagent research document with findings and discoveries:
 
@@ -43,6 +44,7 @@ Stop researching when the original questions are answered:
 * All provided topics and questions have answers or evidence in the subagent research document.
 * Record any clarifying questions that cannot be answered through research.
 * Do not pursue tangential threads beyond the original scope.
+* Do not critique or compare peer model outputs. Parent agents own cross-model critique and synthesis.
 
 Read the subagent research document, cleanup and finalize the subagent research document:
 

@@ -34,7 +34,7 @@ Research-only specialist for deep, comprehensive analysis. Produces a single aut
 
 This agent delegates all research to `Researcher Subagent`. Direct execution applies only to creating and updating files in `.copilot-tracking/research/`, synthesizing and consolidating subagent outputs, and communicating findings to the user.
 
-Run `Researcher Subagent` with `runSubagent` or `task`, and parallelize calls when topics are independent, providing these inputs:
+Run `Researcher Subagent` with `runSubagent` or `task`, and parallelize calls when topics are independent. For `runSubagent`, provide the target agent in `agentName`, the selected model in `model` when needed, and the research topics, questions, source boundaries, and output path in `prompt`.
 
 * Research topic(s) and/or question(s) to deeply and comprehensively research.
 * Subagent research document file path to create or update.
@@ -45,6 +45,60 @@ Run `Researcher Subagent` with `runSubagent` or `task`, and parallelize calls wh
 * When neither `runSubagent` nor `task` tools are available, inform the user that one of these tools is required and should be enabled.
 
 Subagents can run in parallel when investigating independent topics or sources.
+
+### Multi-Model Research Mode
+
+Use multi-model research mode when the user explicitly asks to run the same research through different models, compare model outputs, critique results against each other, or combine model-specific research into an improved final result. Phrases such as "different models", "compare models", "critique results against each other", or "synthesize model outputs" activate this mode. User-supplied model names override the default model set.
+
+When multi-model mode applies:
+
+1. Define one shared set of research questions and source boundaries.
+2. Run `Researcher Subagent` once per selected model with the same research questions and source boundaries.
+3. Pass an explicit `model` value on each `runSubagent` invocation, or the equivalent model field when using `task`.
+4. Include a model-specific `.copilot-tracking/research/subagents/{{YYYY-MM-DD}}/` output path in each subagent prompt.
+5. Read all completed model-specific artifacts, then create critique and synthesis artifacts under `.copilot-tracking/research/subagents/{{YYYY-MM-DD}}/`.
+6. Update the primary `.copilot-tracking/research/{{YYYY-MM-DD}}/` research document as the authoritative handoff artifact.
+
+Default model set for multi-model mode:
+
+* `GPT-5.5 (copilot)`
+* `Claude Opus 4.7 (copilot)`
+* `Gemini 3.1 Pro (copilot)`
+
+Example `runSubagent` routing pattern with separate calls:
+
+GPT model call:
+
+```json
+{
+  "agentName": "Researcher Subagent",
+  "model": "GPT-5.5 (copilot)",
+  "description": "Research shared questions",
+  "prompt": "Research the shared questions and source boundaries for {{topic}}. Write the subagent research document to .copilot-tracking/research/subagents/{{YYYY-MM-DD}}/{{topic}}-model-gpt-5-5.md. Record model identifier: GPT-5.5 (copilot)."
+}
+```
+
+Claude model call:
+
+```json
+{
+  "agentName": "Researcher Subagent",
+  "model": "Claude Opus 4.7 (copilot)",
+  "description": "Research shared questions",
+  "prompt": "Research the shared questions and source boundaries for {{topic}}. Write the subagent research document to .copilot-tracking/research/subagents/{{YYYY-MM-DD}}/{{topic}}-model-claude-opus-4-7.md. Record model identifier: Claude Opus 4.7 (copilot)."
+}
+```
+
+Gemini model call:
+
+```json
+{
+  "agentName": "Researcher Subagent",
+  "model": "Gemini 3.1 Pro (copilot)",
+  "description": "Research shared questions",
+  "prompt": "Research the same shared questions and source boundaries for {{topic}}. Write the subagent research document to .copilot-tracking/research/subagents/{{YYYY-MM-DD}}/{{topic}}-model-gemini-3-1-pro.md. Record model identifier: Gemini 3.1 Pro (copilot)."
+}
+```
 
 ## Context Discipline
 
@@ -73,7 +127,8 @@ Subagent result handling:
 
 Apply cost-first model selection when invoking subagents. Research tasks are read-heavy and do not generate code, so they benefit from a fast-tier model without sacrificing quality.
 
-* Research subagent calls: specify `model: "Claude Haiku 4.5 (copilot)"` on the `runSubagent` invocation to reduce cost.
+* Research subagent calls: specify `model: "GPT-5.5 (copilot)"` on the `runSubagent` invocation unless the user supplies a different model.
+* Multi-model research calls: run one `Researcher Subagent` invocation per selected model. Use `GPT-5.5 (copilot)`, `Claude Opus 4.7 (copilot)`, and `Gemini 3.1 Pro (copilot)` by default, unless the user supplies a different model list.
 * If the research task involves complex code-level reasoning (tracing execution paths, analyzing architecture): omit the `model` parameter to inherit the session model.
 * When the fast model is unavailable or the cost tier constraint prevents downgrading, omit `model` and let the platform resolve it.
 
@@ -83,6 +138,16 @@ Research files reside in `.copilot-tracking/` at the workspace root unless the u
 
 * `.copilot-tracking/research/{{YYYY-MM-DD}}/` - Primary research documents (`task-description-research.md`)
 * `.copilot-tracking/research/subagents/{{YYYY-MM-DD}}/` - Subagent research outputs (`topic-research.md`)
+
+Multi-model research uses deterministic artifact names under `.copilot-tracking/research/subagents/{{YYYY-MM-DD}}/`:
+
+* `.copilot-tracking/research/subagents/{{YYYY-MM-DD}}/{{topic}}-model-{{model-id}}.md` - Per-model research output
+* `.copilot-tracking/research/subagents/{{YYYY-MM-DD}}/{{topic}}-critique.md` - Cross-model critique output
+* `.copilot-tracking/research/subagents/{{YYYY-MM-DD}}/{{topic}}-synthesis.md` - Cross-model synthesis output
+
+Create `{{model-id}}` from the display model name by lowercasing it, removing `(copilot)`, replacing non-alphanumeric runs with hyphens, and trimming leading or trailing hyphens. Examples: `GPT-5.5 (copilot)` becomes `gpt-5-5`; `Claude Opus 4.7 (copilot)` becomes `claude-opus-4-7`; `Gemini 3.1 Pro (copilot)` becomes `gemini-3-1-pro`.
+
+The primary research document in `.copilot-tracking/research/{{YYYY-MM-DD}}/` remains the authoritative planning and implementation handoff. Per-model, critique, synthesis, planning, and follow-on state must remain in `.copilot-tracking/` files.
 
 Create these directories when they do not exist.
 
@@ -124,7 +189,9 @@ Define research scope, explicit questions, and potential risks. Run subagents fo
 
 #### Step 2: Iterate Running Parallel Researcher Subagents
 
-Run `Researcher Subagent` as described in Subagent Delegation, providing research topic(s) and subagent output file path.
+Run `Researcher Subagent` as described in Subagent Delegation, providing research topic(s) and subagent output file path in the subagent prompt.
+
+When multi-model mode applies, run one equivalent `Researcher Subagent` invocation for each selected model, using the shared research questions and model-specific output paths. Parallelize the per-model runs when the questions and source boundaries are independent.
 
 Whenever `Researcher Subagent` responds:
 
@@ -147,7 +214,9 @@ Evaluate implementation alternatives and complete the research document with a s
 * Identify viable implementation approaches with benefits, trade-offs, and complexity.
 * Apply the Technical Scenario Analysis structure for each alternative evaluated.
 
-Run `Researcher Subagent` as described in Subagent Delegation, providing research topic(s) and subagent output file path.
+Run `Researcher Subagent` as described in Subagent Delegation, providing research topic(s) and subagent output file path in the subagent prompt.
+
+When multi-model mode applies, repeat the alternatives research through each selected model before selecting an approach. Keep model-specific findings separate until critique and synthesis are complete.
 
 Whenever `Researcher Subagent` responds:
 
@@ -156,9 +225,32 @@ Whenever `Researcher Subagent` responds:
 
 Update the primary research document with alternatives analysis.
 
+#### Step 2: Critique and Synthesize Multi-Model Findings
+
+Skip this step when multi-model mode is not active.
+
+Read each model-specific research document and write `.copilot-tracking/research/subagents/{{YYYY-MM-DD}}/{{topic}}-critique.md` using this critique rubric:
+
+* Evidence coverage: Identify which findings are backed by concrete file references or external sources.
+* Agreement: Identify conclusions that match across models.
+* Divergence: Identify recommendations that conflict.
+* Omissions: Identify findings one model discovered and another missed.
+* Actionability: Identify which output is easiest to plan and implement safely.
+* Risk handling: Identify which output better captures edge cases, validation needs, and follow-up research.
+
+Write `.copilot-tracking/research/subagents/{{YYYY-MM-DD}}/{{topic}}-synthesis.md` using these synthesis rules:
+
+* Prefer findings supported by direct evidence over unsupported confidence.
+* Preserve unique high-value findings from each model when evidence supports them.
+* Resolve disagreements by referencing project conventions and implementation risk.
+* Keep one selected approach and record rejected alternatives.
+* Record model-specific limitations without over-indexing on model identity.
+
+Update the primary research document with the synthesized recommendation, the selected approach, rejected alternatives, and plain paths to the model-specific, critique, and synthesis `.copilot-tracking/` artifacts.
+
 Return to Phase 1 if alternatives reveal research gaps requiring further investigation.
 
-#### Step 2: Select Approach and Complete Document
+#### Step 3: Select Approach and Complete Document
 
 1. Select one approach using evidence-based criteria and record rationale.
 2. Update the research document with the selected approach, examples, citations, and implementation details.
